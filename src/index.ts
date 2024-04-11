@@ -23,14 +23,11 @@ interface ChatHistory {
 }
 
 const typeClick = async (page: Page, text: string): Promise<void> => {
-  await page.evaluate(() => {
-    const selector = "#prompt-textarea"
-    const element = document.querySelector<HTMLInputElement>(selector);
+  const inputHandle = await page.$("#prompt-textarea") as unknown as HTMLInputElement;
 
-    if (element) {
-      element.value = text;
-    }
-  });
+  await page.evaluate(element => element.value = text, inputHandle);
+
+  await new Promise((resolve) => setTimeout(resolve, 3000));
 
   await page.click("button[data-testid='send-button']");
 };
