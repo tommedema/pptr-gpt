@@ -20,8 +20,8 @@ var Role;
     Role["ASSISTANT"] = "assistant";
 })(Role || (Role = {}));
 const typeClick = async (page, text) => {
-    const selector = "#prompt-textarea";
     await page.evaluate(() => {
+        const selector = "#prompt-textarea";
         const element = document.querySelector(selector);
         if (element) {
             element.value = text;
