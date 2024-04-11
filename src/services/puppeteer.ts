@@ -1,3 +1,4 @@
+import { PuppeteerLaunchOptions } from 'puppeteer';
 import puppeteer from 'puppeteer-extra';
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 
@@ -6,13 +7,8 @@ puppeteer.use(StealthPlugin());
 const usePuppeteer = () => {
   let browser: any = null;
 
-  const init = async (options: {
-    headless?: boolean | 'shell' | undefined;
-  }): Promise<any> => {
-    const params: {
-      headless?: boolean | 'shell' | undefined
-      ignoreDefaultArgs?: string[]
-    } = {
+  const init = async (options: PuppeteerLaunchOptions): Promise<any> => {
+    const params: PuppeteerLaunchOptions = {
       headless: 'shell',
       ignoreDefaultArgs: ['--enable-automation', '--no-sandbox', '--disable-setuid-sandbox', '--incognito'],
       ...options,

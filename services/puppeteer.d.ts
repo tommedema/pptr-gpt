@@ -1,8 +1,7 @@
+import { PuppeteerLaunchOptions } from 'puppeteer';
 declare const _default: {
     browser: any;
-    init: (options: {
-        headless?: boolean | "shell" | undefined;
-    }) => Promise<any>;
+    init: (options: PuppeteerLaunchOptions) => Promise<any>;
     goTo: (url: string) => Promise<any>;
     close: () => Promise<void>;
 };
