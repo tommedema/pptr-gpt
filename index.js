@@ -21,7 +21,7 @@ var Role;
 })(Role || (Role = {}));
 const typeClick = async (page, text) => {
     const inputHandle = await page.$("#prompt-textarea");
-    await page.evaluate(element => element.value = text, inputHandle);
+    await page.evaluate((element, text) => element.value = text, inputHandle, text);
     await new Promise((resolve) => setTimeout(resolve, 3000));
     await page.click("button[data-testid='send-button']");
 };

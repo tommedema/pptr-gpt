@@ -25,7 +25,7 @@ interface ChatHistory {
 const typeClick = async (page: Page, text: string): Promise<void> => {
   const inputHandle = await page.$("#prompt-textarea") as unknown as HTMLInputElement;
 
-  await page.evaluate(element => element.value = text, inputHandle);
+  await page.evaluate((element, text) => element.value = text, inputHandle, text);
 
   await new Promise((resolve) => setTimeout(resolve, 3000));
 
