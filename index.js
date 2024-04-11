@@ -20,7 +20,13 @@ var Role;
     Role["ASSISTANT"] = "assistant";
 })(Role || (Role = {}));
 const typeClick = async (page, text) => {
-    await page.type("#prompt-textarea", text);
+    const selector = "#prompt-textarea";
+    await page.evaluate(() => {
+        const element = document.querySelector(selector);
+        if (element) {
+            element.value = text;
+        }
+    });
     await page.click("button[data-testid='send-button']");
 };
 const init = async (options) => {

@@ -20,7 +20,7 @@ const usePuppeteer = () => {
         return page;
     };
     const close = async () => {
-        await browser.close();
+        await (browser === null || browser === void 0 ? void 0 : browser.close());
     };
     return { browser, init, goTo, close };
 };
