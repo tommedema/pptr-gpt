@@ -3,6 +3,7 @@ import { convert } from "html-to-text";
 import storage from "./services/storage";
 import path from "path";
 import fs from "fs";
+import { PuppeteerLaunchOptions } from "puppeteer";
 
 const CHAT_GPT_URL = "https://chat.openai.com";
 const PREPAND = "ChatGPT\nChatGPT";
@@ -26,17 +27,10 @@ const typeClick = async (page: any, text: string): Promise<void> => {
   await page.click("button[data-testid='send-button']");
 };
 
-const init = async (options: {
-  headless?: boolean;
+const init = async (options: PuppeteerLaunchOptions & {
   screenshots?: boolean;
 }): Promise<void> => {
-  const params: {
-    headless?: boolean
-  } = {}
-
-  if (options.hasOwnProperty('headless')) {
-    params.headless = options.headless
-  }
+  const params = { ...options }
 
   if (options.hasOwnProperty('screenshots')) {
     storage.set('screenshots', String(options.screenshots) as string)

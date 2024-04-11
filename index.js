@@ -24,10 +24,7 @@ const typeClick = async (page, text) => {
     await page.click("button[data-testid='send-button']");
 };
 const init = async (options) => {
-    const params = {};
-    if (options.hasOwnProperty('headless')) {
-        params.headless = options.headless;
-    }
+    const params = Object.assign({}, options);
     if (options.hasOwnProperty('screenshots')) {
         storage_1.default.set('screenshots', String(options.screenshots));
         // create public directory if it doesn't exist

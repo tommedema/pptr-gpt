@@ -1,3 +1,4 @@
+import { PuppeteerLaunchOptions } from "puppeteer";
 declare enum Role {
     USER = "user",
     ASSISTANT = "assistant"
@@ -6,8 +7,7 @@ interface ChatHistory {
     role: Role;
     content: string;
 }
-declare const init: (options: {
-    headless?: boolean;
+declare const init: (options: PuppeteerLaunchOptions & {
     screenshots?: boolean;
 }) => Promise<void>;
 declare const singleMessage: (text: string) => Promise<string>;
