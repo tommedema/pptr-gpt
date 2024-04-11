@@ -23,9 +23,8 @@ interface ChatHistory {
 }
 
 const typeClick = async (page: Page, text: string): Promise<void> => {
-  const selector = "#prompt-textarea"
-
   await page.evaluate(() => {
+    const selector = "#prompt-textarea"
     const element = document.querySelector<HTMLInputElement>(selector);
 
     if (element) {
