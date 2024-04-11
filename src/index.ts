@@ -3,7 +3,7 @@ import { convert } from "html-to-text";
 import storage from "./services/storage";
 import path from "path";
 import fs from "fs";
-import { PuppeteerLaunchOptions } from "puppeteer";
+import { Page, PuppeteerLaunchOptions } from "puppeteer";
 
 const CHAT_GPT_URL = "https://chat.openai.com";
 const PREPAND = "ChatGPT\nChatGPT";
@@ -22,18 +22,27 @@ interface ChatHistory {
   content: string;
 }
 
-const typeClick = async (page: any, text: string): Promise<void> => {
-  await page.type("#prompt-textarea", text);
+const typeClick = async (page: Page, text: string): Promise<void> => {
+  const selector = "#prompt-textarea"
+
+  await page.evaluate(() => {
+    const element = document.querySelector<HTMLInputElement>(selector);
+
+    if (element) {
+      element.value = text;
+    }
+  });
+
   await page.click("button[data-testid='send-button']");
 };
 
 const init = async (options: PuppeteerLaunchOptions & {
   screenshots?: boolean;
 }): Promise<void> => {
-  const params = { ...options }
+  const params = { ...options };
 
   if (options.hasOwnProperty('screenshots')) {
-    storage.set('screenshots', String(options.screenshots) as string)
+    storage.set('screenshots', String(options.screenshots) as string);
 
     // create public directory if it doesn't exist
     if (!fs.existsSync(path.join(__dirname, 'public'))) {

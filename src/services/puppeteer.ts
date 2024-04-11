@@ -1,11 +1,11 @@
-import { PuppeteerLaunchOptions } from 'puppeteer';
+import { Browser, PuppeteerLaunchOptions } from 'puppeteer';
 import puppeteer from 'puppeteer-extra';
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 
 puppeteer.use(StealthPlugin());
 
 const usePuppeteer = () => {
-  let browser: any = null;
+  let browser: Browser | null = null;
 
   const init = async (options: PuppeteerLaunchOptions): Promise<any> => {
     const params: PuppeteerLaunchOptions = {
@@ -19,7 +19,7 @@ const usePuppeteer = () => {
     return browser;
   };
 
-  const goTo = async (url: string): Promise<any> => {
+  const goTo = async (url: string) => {
     const page = await browser!.newPage();
     await page.goto(url);
     await page.setViewport({ width: 1360, height: 980, deviceScaleFactor: 1 });
@@ -27,7 +27,7 @@ const usePuppeteer = () => {
   };
 
   const close = async (): Promise<void> => {
-    await browser!.close();
+    await browser?.close();
   };
 
   return { browser, init, goTo, close };
