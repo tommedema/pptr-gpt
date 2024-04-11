@@ -1,4 +1,4 @@
-import { Browser, PuppeteerLaunchOptions } from 'puppeteer';
+import { Browser, Keyboard, PuppeteerLaunchOptions } from 'puppeteer';
 import puppeteer from 'puppeteer-extra';
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 

@@ -23,13 +23,21 @@ interface ChatHistory {
 }
 
 const typeClick = async (page: Page, text: string): Promise<void> => {
-  const inputHandle = await page.$("#prompt-textarea") as unknown as HTMLInputElement;
+  const inputHandle = await page.$("#prompt-textarea")
 
-  await page.evaluate((element, text) => element.value = text, inputHandle, text);
+  // await page.evaluate((element, text) => element.value = text, inputHandle, text);
 
-  await new Promise((resolve) => setTimeout(resolve, 3000));
+  const sections = text.split('\n')
+  for (const section of sections) {
+    await inputHandle!.type(section)
+    await page.keyboard.down('Shift')
+    await inputHandle!.press('Enter')
+    await page.keyboard.up('Shift')
+  }
 
-  await page.click("button[data-testid='send-button']");
+  await inputHandle!.press('Enter');
+
+  // await page.click("button[data-testid='send-button']");
 };
 
 const init = async (options: PuppeteerLaunchOptions & {
