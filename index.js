@@ -129,6 +129,10 @@ const createChat = async (text) => {
     });
     const response = await send(text);
     return {
+        _: {
+            page,
+            puppeteer: puppeteer_1.default,
+        },
         response,
         history,
         send,

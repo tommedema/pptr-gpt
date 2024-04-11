@@ -100,12 +100,7 @@ const singleMessage = async (text: string): Promise<string> => {
 
 };
 
-const createChat = async (text: string): Promise<{
-  response: string;
-  history: ChatHistory[];
-  send: (message: string) => Promise<string>;
-  close: () => Promise<void>;
-}> => {
+const createChat = async (text: string) => {
   let responseMessageId = 3;
 
   const history: ChatHistory[] = [];
@@ -181,6 +176,10 @@ const createChat = async (text: string): Promise<{
   const response = await send(text);
 
   return {
+    _: {
+      page,
+      puppeteer: pptr,
+    },
     response,
     history,
     send,
