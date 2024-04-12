@@ -127,8 +127,12 @@ const queryPage = async (page: Page, text: string) => {
   return convert(assistantResponseHTML, HTML_TO_TEXT_OPTIONS).trim();
 }
 
+const autoDismissDialogs = (page: Page) => page.on('dialog', dialog => dialog.dismiss());
+
 const singleMessage = async (text: string) => {
   const page = await pptr.goTo(CHAT_GPT_URL);
+
+  autoDismissDialogs(page);
 
   const response = await queryPage(page, text);
 
@@ -139,7 +143,10 @@ const singleMessage = async (text: string) => {
 
 const createChat = async (initialMessage?: string) => {
   const history: ChatHistory[] = [];
+
   const page = await pptr.goTo(CHAT_GPT_URL);
+
+  autoDismissDialogs(page);
 
   const send = async (message: string)=> {
     const answer = await queryPage(page, message);
