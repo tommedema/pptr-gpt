@@ -1,4 +1,4 @@
-import { Browser, Keyboard, PuppeteerLaunchOptions } from 'puppeteer';
+import { Browser, PuppeteerLaunchOptions, Viewport } from 'puppeteer';
 import puppeteer from 'puppeteer-extra';
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 
@@ -19,10 +19,22 @@ const usePuppeteer = () => {
     return browser;
   };
 
-  const goTo = async (url: string) => {
-    const page = await browser!.newPage();
+  const goTo = async (url: string, viewPort?: Viewport) => {
+    if (!browser) {
+      throw new Error('browser not yet initialized')
+    }
+
+    const page = await browser.newPage();
+
     await page.goto(url);
-    await page.setViewport({ width: 1360, height: 980, deviceScaleFactor: 1 });
+
+    await page.setViewport({
+      width: 1360,
+      height: 980,
+      deviceScaleFactor: 1,
+      ...viewPort
+    });
+
     return page;
   };
 
