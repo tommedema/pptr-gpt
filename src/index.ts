@@ -18,8 +18,12 @@ interface ChatHistory {
   content: string;
 }
 
+const DEFAULT_TIMEOUT = 60_000
+const DEFAULT_OUTPUT_TIMEOUT = 300_000
+const DEFAULT_CHANGE_TIMEOUT = 5_000
+
 const DEFAULT_WAIT_SETTINGS = {
-  timeout: 60_000
+  timeout: DEFAULT_TIMEOUT
 };
 
 const SELECTOR_SEND_BUTTON = `document.querySelector("button[data-testid='send-button']")`;
@@ -34,10 +38,46 @@ const awaitInputReady = async (page: Page) => {
   return inputHandle;
 }
 
-const awaitOutputReady = async (page: Page) => {
-  await page.waitForSelector(SELECTOR_SEND_BUTTON, { ...DEFAULT_WAIT_SETTINGS, hidden: true });
+function clickTextWhenAvailable(page: Page, text: string, elementTag = 'div', timeout = DEFAULT_TIMEOUT, abortController = new AbortController()) {
+  const selector = `xpath/${elementTag}[contains(text(), "${text}")]`;
+  
+  page
+    .waitForSelector(selector, { timeout, signal: abortController.signal })
+    .then((element) => {
+      if (!abortController.signal.aborted) {
 
-  await page.waitForSelector(SELECTOR_SEND_BUTTON, DEFAULT_WAIT_SETTINGS);
+        if (element) {
+          element.click();
+          element.dispose();
+        }
+
+        page
+          .waitForSelector(selector, { timeout, signal: abortController.signal, hidden: true })
+          .then(() => {
+            if (!abortController.signal.aborted) {
+              clickTextWhenAvailable(page, text, elementTag, timeout, abortController)
+            }
+          })
+      }
+    })
+    .catch((error) => {
+      // Swallow
+      console.log(`Failed to find or click element: ${error}`);
+    })
+
+  return () => abortController.abort()
+}
+const awaitOutputReady = async (page: Page) => {
+  const abortRegenerateClick = clickTextWhenAvailable(page, 'Regenerate', 'div', DEFAULT_OUTPUT_TIMEOUT);
+
+  try {
+    await page.waitForSelector(SELECTOR_SEND_BUTTON, { timeout: DEFAULT_CHANGE_TIMEOUT, hidden: true });
+  }
+  catch {}
+
+  await page.waitForSelector(SELECTOR_SEND_BUTTON, { timeout: DEFAULT_OUTPUT_TIMEOUT });
+
+  abortRegenerateClick();
 }
 
 const submitMessage = async (page: Page, text: string): Promise<void> => {
