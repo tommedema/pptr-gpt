@@ -14,6 +14,9 @@ declare const init: (options: PuppeteerLaunchOptions) => Promise<{
             init: (options: PuppeteerLaunchOptions) => Promise<any>;
             goTo: (url: string, viewPort?: import("puppeteer").Viewport | undefined) => Promise<Page>;
             close: () => Promise<void>;
+            _: {
+                puppeteer: import("puppeteer-extra").PuppeteerExtra;
+            };
         };
     };
 }>;
@@ -34,6 +37,9 @@ declare const _: {
         init: (options: PuppeteerLaunchOptions) => Promise<any>;
         goTo: (url: string, viewPort?: import("puppeteer").Viewport | undefined) => Promise<Page>;
         close: () => Promise<void>;
+        _: {
+            puppeteer: import("puppeteer-extra").PuppeteerExtra;
+        };
     };
 };
 export { init, singleMessage, createChat, close, _ };

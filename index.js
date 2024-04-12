@@ -6,6 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports._ = exports.close = exports.createChat = exports.singleMessage = exports.init = void 0;
 const puppeteer_1 = __importDefault(require("./services/puppeteer"));
 const html_to_text_1 = require("html-to-text");
+const types_1 = require("util/types");
 const CHAT_GPT_URL = "https://chat.openai.com";
 const HTML_TO_TEXT_OPTIONS = {
     wordwrap: null,
@@ -21,7 +22,7 @@ const DEFAULT_CHANGE_TIMEOUT = 5000;
 const DEFAULT_WAIT_SETTINGS = {
     timeout: DEFAULT_TIMEOUT
 };
-const SELECTOR_SEND_BUTTON = `button[data-testid='send-button']`;
+const SELECTOR_SEND_BUTTON = "button[data-testid='send-button']";
 const SELECTOR_INPUT = "#prompt-textarea";
 const SELECTOR_ASSISTANT_MESSAGE = 'div[data-message-author-role="assistant"]';
 const awaitInputReady = async (page) => {
@@ -49,13 +50,19 @@ function clickTextWhenAvailable(page, text, elementTag = 'div', timeout = DEFAUL
         }
     })
         .catch((error) => {
-        // Swallow
-        console.log(`Failed to find or click element: ${error}`);
+        if ((0, types_1.isNativeError)(error)) {
+            if (error.name !== 'AbortError') {
+                throw new Error(`Failed to find or click element: ${error.name} ${error.message}`);
+            }
+        }
+        else {
+            throw error;
+        }
     });
     return () => abortController.abort();
 }
 const awaitOutputReady = async (page) => {
-    const abortRegenerateClick = clickTextWhenAvailable(page, 'Regenerate', 'div', DEFAULT_OUTPUT_TIMEOUT);
+    const abortRegenerateClick = clickTextWhenAvailable(page, 'Regenerate', 'div', DEFAULT_OUTPUT_TIMEOUT + DEFAULT_CHANGE_TIMEOUT);
     try {
         await page.waitForSelector(SELECTOR_SEND_BUTTON, { timeout: DEFAULT_CHANGE_TIMEOUT, hidden: true });
     }
@@ -73,7 +80,7 @@ const submitMessage = async (page, text) => {
         await page.keyboard.up('Shift');
     }
     await inputHandle.press('Enter');
-    inputHandle.dispose();
+    await inputHandle.dispose();
 };
 const init = async (options) => {
     const params = Object.assign({}, options);

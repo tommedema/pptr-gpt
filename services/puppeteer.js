@@ -25,6 +25,7 @@ const usePuppeteer = () => {
     const close = async () => {
         await (browser === null || browser === void 0 ? void 0 : browser.close());
     };
-    return { browser, init, goTo, close };
+    const _ = { puppeteer: puppeteer_extra_1.default };
+    return { browser, init, goTo, close, _ };
 };
 exports.default = usePuppeteer();
