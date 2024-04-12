@@ -7,24 +7,33 @@ interface ChatHistory {
     role: Role;
     content: string;
 }
-declare const init: (options: PuppeteerLaunchOptions & {
-    screenshots?: boolean;
-}) => Promise<void>;
-declare const singleMessage: (text: string) => Promise<string>;
-declare const createChat: (text: string) => Promise<{
+declare const init: (options: PuppeteerLaunchOptions) => Promise<{
     _: {
-        page: Page;
-        puppeteer: {
+        pptr: {
             browser: null;
             init: (options: PuppeteerLaunchOptions) => Promise<any>;
-            goTo: (url: string) => Promise<Page>;
+            goTo: (url: string, viewPort?: import("puppeteer").Viewport | undefined) => Promise<Page>;
             close: () => Promise<void>;
         };
     };
-    response: string;
+}>;
+declare const singleMessage: (text: string) => Promise<string | null>;
+declare const createChat: (initialMessage?: string) => Promise<{
+    _: {
+        page: Page;
+    };
+    response: string | null;
     history: ChatHistory[];
-    send: (message: string) => Promise<string>;
+    send: (message: string) => Promise<string | null>;
     close: () => Promise<void>;
 }>;
 declare const close: () => Promise<void>;
-export { init, singleMessage, createChat, close };
+declare const _: {
+    pptr: {
+        browser: null;
+        init: (options: PuppeteerLaunchOptions) => Promise<any>;
+        goTo: (url: string, viewPort?: import("puppeteer").Viewport | undefined) => Promise<Page>;
+        close: () => Promise<void>;
+    };
+};
+export { init, singleMessage, createChat, close, _ };

@@ -13,10 +13,13 @@ const usePuppeteer = () => {
         browser = await puppeteer_extra_1.default.launch(params);
         return browser;
     };
-    const goTo = async (url) => {
+    const goTo = async (url, viewPort) => {
+        if (!browser) {
+            throw new Error('browser not yet initialized');
+        }
         const page = await browser.newPage();
         await page.goto(url);
-        await page.setViewport({ width: 1360, height: 980, deviceScaleFactor: 1 });
+        await page.setViewport(Object.assign({ width: 1360, height: 980, deviceScaleFactor: 1 }, viewPort));
         return page;
     };
     const close = async () => {
