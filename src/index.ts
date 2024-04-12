@@ -26,7 +26,7 @@ const DEFAULT_WAIT_SETTINGS = {
   timeout: DEFAULT_TIMEOUT
 };
 
-const SELECTOR_SEND_BUTTON = `document.querySelector("button[data-testid='send-button']")`;
+const SELECTOR_SEND_BUTTON = `button[data-testid='send-button']`;
 const SELECTOR_INPUT = "#prompt-textarea";
 const SELECTOR_ASSISTANT_MESSAGE = 'div[data-message-author-role="assistant"]';
 
