@@ -1,6 +1,7 @@
 import pptr from "./services/puppeteer";
 import { convert } from "html-to-text";
 import { Page, PuppeteerLaunchOptions } from "puppeteer";
+import { isNativeError } from 'util/types'
 
 const CHAT_GPT_URL = "https://chat.openai.com";
 
@@ -26,7 +27,7 @@ const DEFAULT_WAIT_SETTINGS = {
   timeout: DEFAULT_TIMEOUT
 };
 
-const SELECTOR_SEND_BUTTON = `button[data-testid='send-button']`;
+const SELECTOR_SEND_BUTTON = "button[data-testid='send-button']";
 const SELECTOR_INPUT = "#prompt-textarea";
 const SELECTOR_ASSISTANT_MESSAGE = 'div[data-message-author-role="assistant"]';
 
@@ -61,14 +62,20 @@ function clickTextWhenAvailable(page: Page, text: string, elementTag = 'div', ti
       }
     })
     .catch((error) => {
-      // Swallow
-      console.log(`Failed to find or click element: ${error}`);
+      if (isNativeError(error)) {
+        if (error.name !== 'AbortError') {
+          throw new Error(`Failed to find or click element: ${error.name} ${error.message}`);
+        }
+      }
+      else {
+        throw error
+      }
     })
 
   return () => abortController.abort()
 }
 const awaitOutputReady = async (page: Page) => {
-  const abortRegenerateClick = clickTextWhenAvailable(page, 'Regenerate', 'div', DEFAULT_OUTPUT_TIMEOUT);
+  const abortRegenerateClick = clickTextWhenAvailable(page, 'Regenerate', 'div', DEFAULT_OUTPUT_TIMEOUT + DEFAULT_CHANGE_TIMEOUT);
 
   try {
     await page.waitForSelector(SELECTOR_SEND_BUTTON, { timeout: DEFAULT_CHANGE_TIMEOUT, hidden: true });
@@ -92,7 +99,7 @@ const submitMessage = async (page: Page, text: string): Promise<void> => {
   }
 
   await inputHandle!.press('Enter');
-  inputHandle!.dispose();
+  await inputHandle!.dispose();
 };
 
 const init = async (options: PuppeteerLaunchOptions) => {

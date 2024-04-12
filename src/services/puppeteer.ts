@@ -42,7 +42,9 @@ const usePuppeteer = () => {
     await browser?.close();
   };
 
-  return { browser, init, goTo, close };
+  const _ = { puppeteer };
+
+  return { browser, init, goTo, close, _ };
 }
 
 export default usePuppeteer()
