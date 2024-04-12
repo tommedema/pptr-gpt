@@ -9,7 +9,7 @@ const CHAT_GPT_URL = "https://chat.openai.com";
 const PREPAND = "ChatGPT\nChatGPT";
 
 const HTML_TO_TEXT_OPTIONS = {
-  wordwrap: 130,
+  wordwrap: null,
 }
 
 enum Role {
@@ -22,8 +22,16 @@ interface ChatHistory {
   content: string;
 }
 
+const DEFAULT_WAIT_SETTINGS = {
+  timeout: 60_000
+}
+
+const SELECTOR_SEND_BUTTON = `document.querySelector("button[data-testid='send-button']")`
+const SELECTOR_INPUT = "#prompt-textarea"
+const SELECTOR_ASSISTANT_MESSAGE = 'div[data-message-author-role="assistant"]'
+
 const typeSubmit = async (page: Page, text: string): Promise<void> => {
-  const inputHandle = await page.waitForSelector("#prompt-textarea", { timeout: 60_000 })
+  const inputHandle = await page.waitForSelector(SELECTOR_INPUT, { timeout: 60_000 })
   
   const sections = text.split('\n')
   for (const section of sections) {
@@ -39,7 +47,7 @@ const typeSubmit = async (page: Page, text: string): Promise<void> => {
 
 const init = async (options: PuppeteerLaunchOptions & {
   screenshots?: boolean;
-}): Promise<void> => {
+}) => {
   const params = { ...options };
 
   if (options.hasOwnProperty('screenshots')) {
@@ -52,57 +60,49 @@ const init = async (options: PuppeteerLaunchOptions & {
   }
 
   await pptr.init(params);
+
+  const _ = { pptr }
+
+  return { _ }
 };
 
-const singleMessage = async (text: string): Promise<string> => {
+const singleMessage = async (text: string) => {
   const page = await pptr.goTo(CHAT_GPT_URL);
   const screenshots = storage.get('screenshots');
-  // screenshot
+  
   if (screenshots) {
     await page.screenshot({ path: path.join(__dirname, 'public/screenshot.png') });
 
   }
-  await page.waitForSelector("#prompt-textarea", {
-    timeout: 60_000
-  });
+
+  await page.waitForSelector(SELECTOR_INPUT, DEFAULT_WAIT_SETTINGS);
+
   await typeSubmit(page, text);
 
   if (screenshots) {
     await page.screenshot({ path: path.join(__dirname, 'public/screenshot2.png') });
   }
 
-  const response = await page.evaluate(async () => {
-    let prevText: string | null = null;
-    let currentText: any = document.querySelector(
-      `div[data-testid='conversation-turn-3']`
-    )?.innerHTML;
+  await page.waitForSelector(SELECTOR_SEND_BUTTON, { ...DEFAULT_WAIT_SETTINGS, hidden: true })
+  await page.waitForSelector(SELECTOR_SEND_BUTTON, DEFAULT_WAIT_SETTINGS)
 
-    const getHTML = async (): Promise<string> => {
-      return new Promise((resolve) => {
-        const interval = setInterval(() => {
-          prevText = currentText;
+  const assistantResponseHTML = await page.evaluate((selector) => {
+    const elements = document.querySelectorAll<HTMLDivElement>(selector);
 
-          currentText = document.querySelector(
-            `div[data-testid='conversation-turn-3']`
-          )?.innerHTML;
+    if (elements.length === 0) {
+      return null
+    }
 
-          if (currentText && prevText === currentText) {
-            clearInterval(interval);
-            resolve(currentText);
-          }
-        }, 3000);
-      });
-    };
+    return elements[elements.length - 1].innerHTML;
+  }, SELECTOR_ASSISTANT_MESSAGE);
 
-    return getHTML();
-  });
+  await page.close();
 
-  page.close();
+  if (!assistantResponseHTML) {
+    return null
+  }
 
-  return convert(response, HTML_TO_TEXT_OPTIONS)
-    .replace(PREPAND, "")
-    .trim();
-
+  return convert(assistantResponseHTML, HTML_TO_TEXT_OPTIONS).trim();
 };
 
 const createChat = async (text: string) => {
@@ -180,11 +180,10 @@ const createChat = async (text: string) => {
   });
   const response = await send(text);
 
+  const _ = { page }
+
   return {
-    _: {
-      page,
-      puppeteer: pptr,
-    },
+    _,
     response,
     history,
     send,
@@ -196,4 +195,6 @@ const close = async (): Promise<void> => {
   await pptr.close();
 };
 
-export { init, singleMessage, createChat, close };
+const _ = { pptr }
+
+export { init, singleMessage, createChat, close, _ };
