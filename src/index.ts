@@ -22,11 +22,9 @@ interface ChatHistory {
   content: string;
 }
 
-const typeClick = async (page: Page, text: string): Promise<void> => {
-  const inputHandle = await page.$("#prompt-textarea")
-
-  // await page.evaluate((element, text) => element.value = text, inputHandle, text);
-
+const typeSubmit = async (page: Page, text: string): Promise<void> => {
+  const inputHandle = await page.waitForSelector("#prompt-textarea", { timeout: 60_000 })
+  
   const sections = text.split('\n')
   for (const section of sections) {
     await inputHandle!.type(section)
@@ -36,8 +34,7 @@ const typeClick = async (page: Page, text: string): Promise<void> => {
   }
 
   await inputHandle!.press('Enter');
-
-  // await page.click("button[data-testid='send-button']");
+  inputHandle!.dispose()
 };
 
 const init = async (options: PuppeteerLaunchOptions & {
@@ -68,7 +65,7 @@ const singleMessage = async (text: string): Promise<string> => {
   await page.waitForSelector("#prompt-textarea", {
     timeout: 60_000
   });
-  await typeClick(page, text);
+  await typeSubmit(page, text);
 
   if (screenshots) {
     await page.screenshot({ path: path.join(__dirname, 'public/screenshot2.png') });
@@ -117,7 +114,7 @@ const createChat = async (text: string) => {
   const send = async (message: string): Promise<string> => {
     const screenshots = storage.get('screenshots');
   
-    await typeClick(page, message);
+    await typeSubmit(page, message);
   
     if (screenshots) {
       await page.screenshot({ path: path.join(__dirname, `public/screenshot-${responseMessageId + 1}.png`) });
