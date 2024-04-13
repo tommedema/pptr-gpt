@@ -1,6 +1,5 @@
 import pptr from "./services/puppeteer";
-import { Page, PuppeteerLaunchOptions } from "puppeteer";
-import { isNativeError } from 'util/types'
+import { Page, PageEvent, PuppeteerLaunchOptions } from "puppeteer";
 import { EventEmitter } from 'node:events'
 
 export enum Role {
@@ -63,11 +62,10 @@ export type ChatGPTRootMessage = {
 
 export const CHAT_GPT_URL = "https://chat.openai.com";
 
-const CHAT_GPT_MESSAGE_DONE_MARKER = '[DONE]'
+const CHAT_GPT_MESSAGE_DONE_MARKER = '[DONE]';
 
-const DEFAULT_TIMEOUT = 60_000
-const DEFAULT_OUTPUT_TIMEOUT = 300_000
-const DEFAULT_CHANGE_TIMEOUT = 5_000
+const DEFAULT_CHANGE_TIMEOUT = 5_000;
+const DEFAULT_TIMEOUT = 60_000;
 
 const DEFAULT_WAIT_SETTINGS = {
   timeout: DEFAULT_TIMEOUT
@@ -78,54 +76,68 @@ const SELECTOR_INPUT = "#prompt-textarea";
 
 function clickTextWhenAvailable(page: Page, text: string, elementTag = 'div', timeout = DEFAULT_TIMEOUT, abortController = new AbortController()) {
   const selector = `xpath/${elementTag}[contains(text(), "${text}")]`;
-  
-  page
-    .waitForSelector(selector, { timeout, signal: abortController.signal })
-    .then((element) => {
-      if (!abortController.signal.aborted) {
 
-        if (element) {
-          element.click();
-          element.dispose();
-        }
+  const handlePageClose = () => abortController.abort();
 
-        page
-          .waitForSelector(selector, { timeout, signal: abortController.signal, hidden: true })
-          .then(() => {
-            if (!abortController.signal.aborted) {
-              clickTextWhenAvailable(page, text, elementTag, timeout, abortController)
-            }
-          })
-      }
-    })
-    .catch((error) => {
-      if (isNativeError(error)) {
+  if (page.isClosed()) {
+    handlePageClose();
+  }
+  else {
+    page.once(PageEvent.Close, handlePageClose);
+  }
+
+  if (!abortController.signal.aborted) {
+    page
+      .waitForSelector(selector, { timeout, signal: abortController.signal })
+      .then(async (element) => {
         if (!abortController.signal.aborted) {
+          if (element) {
+            await element.click();
+            await element.dispose();
+
+            if (!abortController.signal.aborted) {
+              await page.waitForSelector(selector, { timeout: Math.min(timeout, DEFAULT_CHANGE_TIMEOUT), signal: abortController.signal, hidden: true });
+            }
+          }
+          
+          if (!abortController.signal.aborted) {
+            return clickTextWhenAvailable(page, text, elementTag, timeout, abortController);
+          }
+        }
+      })
+      .catch((error: Error) => {
+        if (!abortController.signal.aborted && error.name !== "AbortError") {
+          console.trace("Show stack trace");
           throw new Error(`Failed to find or click element: ${error.name} ${error.message}`);
         }
-      }
-      else {
-        throw error
-      }
-    })
+      }); 
+  }
 
-  return () => abortController.abort()
+  return () => {
+    page.off(PageEvent.Close, handlePageClose);
+    abortController.abort();
+  }
 }
 
 const injectMessageListenerToPage = async (page: Page) => {
-  clickTextWhenAvailable(page, 'Regenerate', 'div', 0);
-  clickTextWhenAvailable(page, 'Continue generating', 'div', 0);
+  const abortListener1 = clickTextWhenAvailable(page, 'Regenerate', 'div', 0);
+  const abortListener2 = clickTextWhenAvailable(page, 'Continue generating', 'div', 0);
+
+  const abortListeners = () => {
+    abortListener1();
+    abortListener2();
+  };
 
   const emitter = new EventEmitter();
   
   const awaitNextCompleteMessage = () => new Promise<string>((resolve) => emitter.once('finish', (messageString: string) => resolve(messageString)));
 
-  let partialMessageParts: string[] = []
+  let partialMessageParts: string[] = [];
 
   const sentMessageToHost = (messageJSONString: string) => {
     const rootMessage = JSON.parse(messageJSONString) as ChatGPTRootMessage;
 
-    partialMessageParts.push(...rootMessage.message.content.parts)
+    partialMessageParts.push(...rootMessage.message.content.parts);
 
     if (rootMessage.message.metadata.finish_details.type === 'stop') {
       emitter.emit('finish', partialMessageParts.join(''));
@@ -136,55 +148,56 @@ const injectMessageListenerToPage = async (page: Page) => {
   await page.exposeFunction('sentMessageToHost', sentMessageToHost);
 
   await page.evaluateOnNewDocument((CHAT_GPT_MESSAGE_DONE_MARKER) => {
-    const originalFetch = window.fetch
+    const originalFetch = window.fetch;
+
     window.fetch = async (...args) => {
-      const url = args[0] instanceof URL ? args[0].href : args[0].toString()
+      const url = args[0] instanceof URL ? args[0].href : args[0].toString();
 
       if (url.includes('/conversation') && args[1] && args[1].method === 'POST') {
-        const response = await originalFetch(...args)
+        const response = await originalFetch(...args);
 
         if (!response.ok) {
-          return response
+          return response;
         }
 
-        const clonedResponse = response.clone()
+        const clonedResponse = response.clone();
 
         if (!clonedResponse.body) {
-          return response
+          return response;
         }
 
-        const reader = clonedResponse.body.getReader()
-        const decoder = new TextDecoder('utf-8', { fatal: false })
+        const reader = clonedResponse.body.getReader();
+        const decoder = new TextDecoder('utf-8', { fatal: false });
 
         async function processText({
           done,
           value,
         }: ReadableStreamReadResult<Uint8Array>): Promise<void> {
-          const streamChunk = decoder.decode(value, { stream: true })
+          const streamChunk = decoder.decode(value, { stream: true });
 
           const chunkStrings = streamChunk
             .split('data: ')
             .map((s) => s.trim())
-            .filter((s) => s)
+            .filter((s) => s);
 
           for (const chunk of chunkStrings) {
             if (chunk === CHAT_GPT_MESSAGE_DONE_MARKER) {
-              reader.releaseLock()
-              return Promise.resolve()
+              reader.releaseLock();
+              return Promise.resolve();
             }
 
             try {
-              const parsed = JSON.parse(chunk) as ChatGPTRootMessage
+              const parsed = JSON.parse(chunk) as ChatGPTRootMessage;
 
               if (parsed?.message?.status === 'finished_successfully' && typeof parsed.message.metadata?.finish_details?.type === 'string') {
                 ;(
                   window as unknown as Window & {
                     sentMessageToHost: typeof sentMessageToHost
                   }
-                ).sentMessageToHost(chunk)
+                ).sentMessageToHost(chunk);
 
-                reader.releaseLock()
-                return Promise.resolve()
+                reader.releaseLock();
+                return Promise.resolve();
               }
             } catch {
               /* swallow */
@@ -192,34 +205,34 @@ const injectMessageListenerToPage = async (page: Page) => {
           }
 
           if (done) {
-            reader.releaseLock()
-            return Promise.resolve()
+            reader.releaseLock();
+            return Promise.resolve();
           }
 
           // Recurse into the next part of the stream
           try {
-            const resultInner = await reader.read()
-            return processText(resultInner)
+            const resultInner = await reader.read();
+            return processText(resultInner);
           } catch {
-            return await Promise.resolve()
+            return await Promise.resolve();
           }
         }
 
         try {
-          const resultOuter = await reader.read()
-          processText(resultOuter)
+          const resultOuter = await reader.read();
+          processText(resultOuter);
         } catch {
           /* swallow */
         }
 
-        return response
+        return response;
       } else {
-        return originalFetch(...args)
+        return originalFetch(...args);
       }
     }
   }, CHAT_GPT_MESSAGE_DONE_MARKER);
 
-  return awaitNextCompleteMessage;
+  return { awaitNextCompleteMessage, abortListeners };
 }
 
 const awaitInputReady = async (page: Page) => {
@@ -228,7 +241,7 @@ const awaitInputReady = async (page: Page) => {
   await page.waitForSelector(SELECTOR_SEND_BUTTON, DEFAULT_WAIT_SETTINGS);
 
   return inputHandle;
-}
+};
 
 const submitMessage = async (page: Page, text: string): Promise<void> => {
   const inputHandle = await awaitInputReady(page);
@@ -264,7 +277,7 @@ const createChat = async (initialMessage?: string) => {
 
   autoDismissDialogs(page);
 
-  const awaitNextCompleteMessage = await injectMessageListenerToPage(page);
+  const { awaitNextCompleteMessage, abortListeners } = await injectMessageListenerToPage(page);
 
   await page.goto(CHAT_GPT_URL);
 
@@ -275,20 +288,23 @@ const createChat = async (initialMessage?: string) => {
 
     const response = await awaitNextCompleteMessage();
 
-    history.push({
-      role: Role.USER,
-      content: message,
-    });
-
-    history.push({
-      role: Role.ASSISTANT,
-      content: response,
-    });
+    history.push(
+      {
+        role: Role.USER,
+        content: message,
+      },
+      {
+        role: Role.ASSISTANT,
+        content: response,
+      }
+    );
 
     return response;
   };
 
   const close = async () => {
+    page.removeAllListeners();
+    abortListeners();
     await page.close();
   };
 
