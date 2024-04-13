@@ -96,7 +96,11 @@ function clickTextWhenAvailable(page: Page, text: string, elementTag = 'div', ti
             await element.dispose();
 
             if (!abortController.signal.aborted) {
-              await page.waitForSelector(selector, { timeout: Math.min(timeout, DEFAULT_CHANGE_TIMEOUT), signal: abortController.signal, hidden: true });
+              try {
+                await page.waitForSelector(selector, { timeout: timeout === 0 ? DEFAULT_CHANGE_TIMEOUT : Math.min(timeout, DEFAULT_CHANGE_TIMEOUT), signal: abortController.signal, hidden: true });
+              } catch {
+                /* swallow */
+              }
             }
           }
           

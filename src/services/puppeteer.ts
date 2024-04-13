@@ -11,6 +11,7 @@ const usePuppeteer = () => {
     const params: PuppeteerLaunchOptions = {
       headless: 'shell',
       ignoreDefaultArgs: ['--enable-automation', '--no-sandbox', '--disable-setuid-sandbox', '--incognito'],
+      protocolTimeout: 0,
       ...options,
     }
 
