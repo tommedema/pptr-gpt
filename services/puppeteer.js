@@ -13,12 +13,14 @@ const usePuppeteer = () => {
         browser = await puppeteer_extra_1.default.launch(params);
         return browser;
     };
-    const goTo = async (url, viewPort) => {
+    const newPage = async (url, viewPort) => {
         if (!browser) {
             throw new Error('browser not yet initialized');
         }
         const page = await browser.newPage();
-        await page.goto(url);
+        if (url) {
+            await page.goto(url);
+        }
         await page.setViewport(Object.assign({ width: 1360, height: 980, deviceScaleFactor: 1 }, viewPort));
         return page;
     };
@@ -26,6 +28,6 @@ const usePuppeteer = () => {
         await (browser === null || browser === void 0 ? void 0 : browser.close());
     };
     const _ = { puppeteer: puppeteer_extra_1.default };
-    return { browser, init, goTo, close, _ };
+    return { browser, init, newPage, close, _ };
 };
 exports.default = usePuppeteer();

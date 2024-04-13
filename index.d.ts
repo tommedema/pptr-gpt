@@ -1,18 +1,61 @@
 import { Page, PuppeteerLaunchOptions } from "puppeteer";
-declare enum Role {
+export declare enum Role {
     USER = "user",
     ASSISTANT = "assistant"
 }
-interface ChatHistory {
+export interface ChatHistory {
     role: Role;
     content: string;
 }
+export interface ChatGPTMessage {
+    id: string;
+    author: ChatGPTAuthor;
+    create_time: number;
+    update_time: number | null;
+    content: ChatGPTContent;
+    status: 'finished_successfully' | 'in_progress';
+    end_turn: boolean | null;
+    weight: number;
+    metadata: ChatGPTMetadata;
+    recipient: 'all';
+}
+export interface ChatGPTAuthor {
+    role: 'assistant' | 'user';
+    name: string | null;
+    metadata: Record<string, unknown>;
+}
+export interface ChatGPTContent {
+    content_type: 'text';
+    parts: string[];
+}
+export interface ChatGPTMetadata {
+    finish_details: ChatGPTFinishDetails;
+    citations: unknown[];
+    gizmo_id: string | null;
+    is_complete: boolean;
+    message_type: 'next';
+    model_slug: string;
+    default_model_slug: string;
+    pad: string;
+    parent_id: string;
+    model_switcher_deny: unknown[];
+}
+export interface ChatGPTFinishDetails {
+    type: 'max_tokens' | 'stop';
+    stop_tokens: number[];
+}
+export type ChatGPTRootMessage = {
+    message: ChatGPTMessage;
+    conversation_id: string;
+    error: string | null;
+};
+export declare const CHAT_GPT_URL = "https://chat.openai.com";
 declare const init: (options: PuppeteerLaunchOptions) => Promise<{
     _: {
         pptr: {
             browser: null;
             init: (options: PuppeteerLaunchOptions) => Promise<any>;
-            goTo: (url: string, viewPort?: import("puppeteer").Viewport | undefined) => Promise<Page>;
+            newPage: (url?: string | undefined, viewPort?: import("puppeteer").Viewport | undefined) => Promise<Page>;
             close: () => Promise<void>;
             _: {
                 puppeteer: import("puppeteer-extra").PuppeteerExtra;
@@ -20,22 +63,22 @@ declare const init: (options: PuppeteerLaunchOptions) => Promise<{
         };
     };
 }>;
-declare const singleMessage: (text: string) => Promise<string | null>;
 declare const createChat: (initialMessage?: string) => Promise<{
     _: {
         page: Page;
     };
     response: string | null;
     history: ChatHistory[];
-    send: (message: string) => Promise<string | null>;
+    send: (message: string) => Promise<string>;
     close: () => Promise<void>;
 }>;
+declare const singleMessage: (text: string) => Promise<string>;
 declare const close: () => Promise<void>;
 declare const _: {
     pptr: {
         browser: null;
         init: (options: PuppeteerLaunchOptions) => Promise<any>;
-        goTo: (url: string, viewPort?: import("puppeteer").Viewport | undefined) => Promise<Page>;
+        newPage: (url?: string | undefined, viewPort?: import("puppeteer").Viewport | undefined) => Promise<Page>;
         close: () => Promise<void>;
         _: {
             puppeteer: import("puppeteer-extra").PuppeteerExtra;

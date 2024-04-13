@@ -3,19 +3,17 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports._ = exports.close = exports.createChat = exports.singleMessage = exports.init = void 0;
+exports._ = exports.close = exports.createChat = exports.singleMessage = exports.init = exports.CHAT_GPT_URL = exports.Role = void 0;
 const puppeteer_1 = __importDefault(require("./services/puppeteer"));
-const html_to_text_1 = require("html-to-text");
 const types_1 = require("util/types");
-const CHAT_GPT_URL = "https://chat.openai.com";
-const HTML_TO_TEXT_OPTIONS = {
-    wordwrap: null,
-};
+const node_events_1 = require("node:events");
 var Role;
 (function (Role) {
     Role["USER"] = "user";
     Role["ASSISTANT"] = "assistant";
-})(Role || (Role = {}));
+})(Role || (exports.Role = Role = {}));
+exports.CHAT_GPT_URL = "https://chat.openai.com";
+const CHAT_GPT_MESSAGE_DONE_MARKER = '[DONE]';
 const DEFAULT_TIMEOUT = 60000;
 const DEFAULT_OUTPUT_TIMEOUT = 300000;
 const DEFAULT_CHANGE_TIMEOUT = 5000;
@@ -24,12 +22,6 @@ const DEFAULT_WAIT_SETTINGS = {
 };
 const SELECTOR_SEND_BUTTON = "button[data-testid='send-button']";
 const SELECTOR_INPUT = "#prompt-textarea";
-const SELECTOR_ASSISTANT_MESSAGE = 'div[data-message-author-role="assistant"]';
-const awaitInputReady = async (page) => {
-    const inputHandle = await page.waitForSelector(SELECTOR_INPUT, DEFAULT_WAIT_SETTINGS);
-    await page.waitForSelector(SELECTOR_SEND_BUTTON, DEFAULT_WAIT_SETTINGS);
-    return inputHandle;
-};
 function clickTextWhenAvailable(page, text, elementTag = 'div', timeout = DEFAULT_TIMEOUT, abortController = new AbortController()) {
     const selector = `xpath/${elementTag}[contains(text(), "${text}")]`;
     page
@@ -51,7 +43,7 @@ function clickTextWhenAvailable(page, text, elementTag = 'div', timeout = DEFAUL
     })
         .catch((error) => {
         if ((0, types_1.isNativeError)(error)) {
-            if (error.name !== 'AbortError') {
+            if (!abortController.signal.aborted) {
                 throw new Error(`Failed to find or click element: ${error.name} ${error.message}`);
             }
         }
@@ -61,14 +53,94 @@ function clickTextWhenAvailable(page, text, elementTag = 'div', timeout = DEFAUL
     });
     return () => abortController.abort();
 }
-const awaitOutputReady = async (page) => {
-    const abortRegenerateClick = clickTextWhenAvailable(page, 'Regenerate', 'div', DEFAULT_OUTPUT_TIMEOUT + DEFAULT_CHANGE_TIMEOUT);
-    try {
-        await page.waitForSelector(SELECTOR_SEND_BUTTON, { timeout: DEFAULT_CHANGE_TIMEOUT, hidden: true });
-    }
-    catch (_a) { }
-    await page.waitForSelector(SELECTOR_SEND_BUTTON, { timeout: DEFAULT_OUTPUT_TIMEOUT });
-    abortRegenerateClick();
+const injectMessageListenerToPage = async (page) => {
+    clickTextWhenAvailable(page, 'Regenerate', 'div', DEFAULT_OUTPUT_TIMEOUT + DEFAULT_CHANGE_TIMEOUT);
+    clickTextWhenAvailable(page, 'Continue generating', 'div', DEFAULT_OUTPUT_TIMEOUT + DEFAULT_CHANGE_TIMEOUT);
+    const emitter = new node_events_1.EventEmitter();
+    const awaitNextCompleteMessage = () => new Promise((resolve) => emitter.once('finish', (messageString) => resolve(messageString)));
+    let partialMessageParts = [];
+    const sentMessageToHost = (messageJSONString) => {
+        const rootMessage = JSON.parse(messageJSONString);
+        partialMessageParts.push(...rootMessage.message.content.parts);
+        if (rootMessage.message.metadata.finish_details.type === 'stop') {
+            emitter.emit('finish', partialMessageParts.join(''));
+            partialMessageParts = [];
+        }
+    };
+    await page.exposeFunction('sentMessageToHost', sentMessageToHost);
+    await page.evaluateOnNewDocument((CHAT_GPT_MESSAGE_DONE_MARKER) => {
+        const originalFetch = window.fetch;
+        window.fetch = async (...args) => {
+            const url = args[0] instanceof URL ? args[0].href : args[0].toString();
+            if (url.includes('/conversation') && args[1] && args[1].method === 'POST') {
+                const response = await originalFetch(...args);
+                if (!response.ok) {
+                    return response;
+                }
+                const clonedResponse = response.clone();
+                if (!clonedResponse.body) {
+                    return response;
+                }
+                const reader = clonedResponse.body.getReader();
+                const decoder = new TextDecoder('utf-8', { fatal: false });
+                async function processText({ done, value, }) {
+                    var _a;
+                    const streamChunk = decoder.decode(value, { stream: true });
+                    const chunkStrings = streamChunk
+                        .split('data: ')
+                        .map((s) => s.trim())
+                        .filter((s) => s);
+                    for (const chunk of chunkStrings) {
+                        if (chunk === CHAT_GPT_MESSAGE_DONE_MARKER) {
+                            reader.releaseLock();
+                            return Promise.resolve();
+                        }
+                        try {
+                            const parsed = JSON.parse(chunk);
+                            if (((_a = parsed === null || parsed === void 0 ? void 0 : parsed.message) === null || _a === void 0 ? void 0 : _a.status) === 'finished_successfully') {
+                                ;
+                                window.sentMessageToHost(chunk);
+                                reader.releaseLock();
+                                return Promise.resolve();
+                            }
+                        }
+                        catch (_b) {
+                            /* swallow */
+                        }
+                    }
+                    if (done) {
+                        reader.releaseLock();
+                        return Promise.resolve();
+                    }
+                    // Recurse into the next part of the stream
+                    try {
+                        const resultInner = await reader.read();
+                        return processText(resultInner);
+                    }
+                    catch (_c) {
+                        return await Promise.resolve();
+                    }
+                }
+                try {
+                    const resultOuter = await reader.read();
+                    processText(resultOuter);
+                }
+                catch (_a) {
+                    /* swallow */
+                }
+                return response;
+            }
+            else {
+                return originalFetch(...args);
+            }
+        };
+    }, CHAT_GPT_MESSAGE_DONE_MARKER);
+    return awaitNextCompleteMessage;
+};
+const awaitInputReady = async (page) => {
+    const inputHandle = await page.waitForSelector(SELECTOR_INPUT, DEFAULT_WAIT_SETTINGS);
+    await page.waitForSelector(SELECTOR_SEND_BUTTON, DEFAULT_WAIT_SETTINGS);
+    return inputHandle;
 };
 const submitMessage = async (page, text) => {
     const inputHandle = await awaitInputReady(page);
@@ -89,53 +161,30 @@ const init = async (options) => {
     return { _ };
 };
 exports.init = init;
-const queryPage = async (page, text) => {
-    await submitMessage(page, text);
-    await awaitOutputReady(page);
-    const assistantResponseHTML = await page.evaluate((selector) => {
-        const elements = document.querySelectorAll(selector);
-        if (elements.length === 0) {
-            return null;
-        }
-        return elements[elements.length - 1].innerHTML;
-    }, SELECTOR_ASSISTANT_MESSAGE);
-    if (!assistantResponseHTML) {
-        return null;
-    }
-    return (0, html_to_text_1.convert)(assistantResponseHTML, HTML_TO_TEXT_OPTIONS).trim();
-};
 const autoDismissDialogs = (page) => page.on('dialog', dialog => dialog.dismiss());
-const singleMessage = async (text) => {
-    const page = await puppeteer_1.default.goTo(CHAT_GPT_URL);
-    autoDismissDialogs(page);
-    const response = await queryPage(page, text);
-    await page.close();
-    return response;
-};
-exports.singleMessage = singleMessage;
 const createChat = async (initialMessage) => {
     const history = [];
-    const page = await puppeteer_1.default.goTo(CHAT_GPT_URL);
+    const page = await puppeteer_1.default.newPage();
     autoDismissDialogs(page);
+    const awaitNextCompleteMessage = await injectMessageListenerToPage(page);
+    await page.goto(exports.CHAT_GPT_URL);
+    await awaitInputReady(page);
     const send = async (message) => {
-        const answer = await queryPage(page, message);
-        if (!answer) {
-            return null;
-        }
+        await submitMessage(page, message);
+        const response = await awaitNextCompleteMessage();
         history.push({
             role: Role.USER,
             content: message,
         });
         history.push({
             role: Role.ASSISTANT,
-            content: answer,
+            content: response,
         });
-        return answer;
+        return response;
     };
     const close = async () => {
         await page.close();
     };
-    await awaitInputReady(page);
     const response = initialMessage ? await send(initialMessage) : null;
     const _ = { page };
     return {
@@ -147,6 +196,15 @@ const createChat = async (initialMessage) => {
     };
 };
 exports.createChat = createChat;
+const singleMessage = async (text) => {
+    const chat = await createChat(text);
+    if (typeof chat.response !== 'string') {
+        throw new Error('initial chat response is not a string');
+    }
+    await chat.close();
+    return chat.response;
+};
+exports.singleMessage = singleMessage;
 const close = async () => {
     await puppeteer_1.default.close();
 };
