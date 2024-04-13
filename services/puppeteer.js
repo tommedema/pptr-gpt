@@ -9,7 +9,7 @@ puppeteer_extra_1.default.use((0, puppeteer_extra_plugin_stealth_1.default)());
 const usePuppeteer = () => {
     let browser = null;
     const init = async (options) => {
-        const params = Object.assign({ headless: 'shell', ignoreDefaultArgs: ['--enable-automation', '--no-sandbox', '--disable-setuid-sandbox', '--incognito'] }, options);
+        const params = Object.assign({ headless: 'shell', ignoreDefaultArgs: ['--enable-automation', '--no-sandbox', '--disable-setuid-sandbox', '--incognito'], protocolTimeout: 0 }, options);
         browser = await puppeteer_extra_1.default.launch(params);
         return browser;
     };
