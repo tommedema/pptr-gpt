@@ -20,24 +20,44 @@ const DEFAULT_WAIT_SETTINGS = {
 };
 const SELECTOR_SEND_BUTTON = "button[data-testid='send-button']";
 const SELECTOR_INPUT = "#prompt-textarea";
-function clickTextWhenAvailable(page, text, elementTag = 'div', timeout = DEFAULT_TIMEOUT, abortController = new AbortController()) {
-    const selector = `xpath/${elementTag}[contains(text(), "${text}")]`;
-    const handlePageClose = () => abortController.abort();
+const SELECTOR_SCROLL_DOWN = "button.rounded-full.bg-clip-padding:has(> svg)";
+function clickSelectorWhenAvailable(page, selector, timeout = DEFAULT_TIMEOUT, abortController = new AbortController()) {
+    const cleanup = () => {
+        page.off("close" /* PageEvent.Close */, cleanup);
+        if (!abortController.signal.aborted) {
+            abortController.abort();
+        }
+    };
     if (page.isClosed()) {
-        handlePageClose();
+        cleanup();
+        return () => { };
     }
     else {
-        page.once("close" /* PageEvent.Close */, handlePageClose);
+        page.once("close" /* PageEvent.Close */, cleanup);
     }
     if (!abortController.signal.aborted) {
         page
             .waitForSelector(selector, { timeout, signal: abortController.signal })
             .then(async (element) => {
-            if (!abortController.signal.aborted) {
+            if (!abortController.signal.aborted && !page.isClosed()) {
                 if (element) {
-                    await element.click();
-                    await element.dispose();
-                    if (!abortController.signal.aborted) {
+                    try {
+                        await element.click();
+                    }
+                    catch (error) {
+                        console.error("Failed to click element: " + error.message);
+                        throw error;
+                    }
+                    if (!abortController.signal.aborted && !page.isClosed()) {
+                        try {
+                            await element.dispose();
+                        }
+                        catch (error) {
+                            console.error("Failed to dispose element: " + error.message);
+                            throw error;
+                        }
+                    }
+                    if (!abortController.signal.aborted && !page.isClosed()) {
                         try {
                             await page.waitForSelector(selector, { timeout: timeout === 0 ? DEFAULT_CHANGE_TIMEOUT : Math.min(timeout, DEFAULT_CHANGE_TIMEOUT), signal: abortController.signal, hidden: true });
                         }
@@ -46,29 +66,33 @@ function clickTextWhenAvailable(page, text, elementTag = 'div', timeout = DEFAUL
                         }
                     }
                 }
-                if (!abortController.signal.aborted) {
-                    return clickTextWhenAvailable(page, text, elementTag, timeout, abortController);
+                if (!abortController.signal.aborted && !page.isClosed()) {
+                    return clickSelectorWhenAvailable(page, selector, timeout, abortController);
                 }
             }
         })
             .catch((error) => {
-            if (!abortController.signal.aborted && error.name !== "AbortError") {
+            if (!abortController.signal.aborted && error.name !== "AbortError" && !page.isClosed()) {
                 console.trace("Show stack trace");
+                cleanup();
                 throw new Error(`Failed to find or click element: ${error.name} ${error.message}`);
             }
         });
     }
-    return () => {
-        page.off("close" /* PageEvent.Close */, handlePageClose);
-        abortController.abort();
-    };
+    return cleanup;
+}
+function clickTextWhenAvailable(page, text, elementTag = 'div', timeout = DEFAULT_TIMEOUT, abortController = new AbortController()) {
+    const selector = `xpath/${elementTag}[contains(text(), "${text}")]`;
+    return clickSelectorWhenAvailable(page, selector, timeout, abortController);
 }
 const injectMessageListenerToPage = async (page) => {
     const abortListener1 = clickTextWhenAvailable(page, 'Regenerate', 'div', 0);
     const abortListener2 = clickTextWhenAvailable(page, 'Continue generating', 'div', 0);
+    const abortListener3 = clickSelectorWhenAvailable(page, SELECTOR_SCROLL_DOWN, 0);
     const abortListeners = () => {
         abortListener1();
         abortListener2();
+        abortListener3();
     };
     const emitter = new node_events_1.EventEmitter();
     const awaitNextCompleteMessage = () => new Promise((resolve) => emitter.once('finish', (messageString) => resolve(messageString)));
