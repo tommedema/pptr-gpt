@@ -5,7 +5,6 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports._ = exports.close = exports.createChat = exports.singleMessage = exports.init = exports.CHAT_GPT_URL = exports.Role = void 0;
 const puppeteer_1 = __importDefault(require("./services/puppeteer"));
-const types_1 = require("util/types");
 const node_events_1 = require("node:events");
 var Role;
 (function (Role) {
@@ -14,9 +13,8 @@ var Role;
 })(Role || (exports.Role = Role = {}));
 exports.CHAT_GPT_URL = "https://chat.openai.com";
 const CHAT_GPT_MESSAGE_DONE_MARKER = '[DONE]';
-const DEFAULT_TIMEOUT = 60000;
-const DEFAULT_OUTPUT_TIMEOUT = 300000;
 const DEFAULT_CHANGE_TIMEOUT = 5000;
+const DEFAULT_TIMEOUT = 60000;
 const DEFAULT_WAIT_SETTINGS = {
     timeout: DEFAULT_TIMEOUT
 };
@@ -24,38 +22,49 @@ const SELECTOR_SEND_BUTTON = "button[data-testid='send-button']";
 const SELECTOR_INPUT = "#prompt-textarea";
 function clickTextWhenAvailable(page, text, elementTag = 'div', timeout = DEFAULT_TIMEOUT, abortController = new AbortController()) {
     const selector = `xpath/${elementTag}[contains(text(), "${text}")]`;
-    page
-        .waitForSelector(selector, { timeout, signal: abortController.signal })
-        .then((element) => {
-        if (!abortController.signal.aborted) {
-            if (element) {
-                element.click();
-                element.dispose();
-            }
-            page
-                .waitForSelector(selector, { timeout, signal: abortController.signal, hidden: true })
-                .then(() => {
-                if (!abortController.signal.aborted) {
-                    clickTextWhenAvailable(page, text, elementTag, timeout, abortController);
-                }
-            });
-        }
-    })
-        .catch((error) => {
-        if ((0, types_1.isNativeError)(error)) {
+    const handlePageClose = () => abortController.abort();
+    if (page.isClosed()) {
+        handlePageClose();
+    }
+    else {
+        page.once("close" /* PageEvent.Close */, handlePageClose);
+    }
+    if (!abortController.signal.aborted) {
+        page
+            .waitForSelector(selector, { timeout, signal: abortController.signal })
+            .then(async (element) => {
             if (!abortController.signal.aborted) {
+                if (element) {
+                    await element.click();
+                    await element.dispose();
+                    if (!abortController.signal.aborted) {
+                        await page.waitForSelector(selector, { timeout: Math.min(timeout, DEFAULT_CHANGE_TIMEOUT), signal: abortController.signal, hidden: true });
+                    }
+                }
+                if (!abortController.signal.aborted) {
+                    return clickTextWhenAvailable(page, text, elementTag, timeout, abortController);
+                }
+            }
+        })
+            .catch((error) => {
+            if (!abortController.signal.aborted && error.name !== "AbortError") {
+                console.trace("Show stack trace");
                 throw new Error(`Failed to find or click element: ${error.name} ${error.message}`);
             }
-        }
-        else {
-            throw error;
-        }
-    });
-    return () => abortController.abort();
+        });
+    }
+    return () => {
+        page.off("close" /* PageEvent.Close */, handlePageClose);
+        abortController.abort();
+    };
 }
 const injectMessageListenerToPage = async (page) => {
-    clickTextWhenAvailable(page, 'Regenerate', 'div', 0);
-    clickTextWhenAvailable(page, 'Continue generating', 'div', 0);
+    const abortListener1 = clickTextWhenAvailable(page, 'Regenerate', 'div', 0);
+    const abortListener2 = clickTextWhenAvailable(page, 'Continue generating', 'div', 0);
+    const abortListeners = () => {
+        abortListener1();
+        abortListener2();
+    };
     const emitter = new node_events_1.EventEmitter();
     const awaitNextCompleteMessage = () => new Promise((resolve) => emitter.once('finish', (messageString) => resolve(messageString)));
     let partialMessageParts = [];
@@ -135,7 +144,7 @@ const injectMessageListenerToPage = async (page) => {
             }
         };
     }, CHAT_GPT_MESSAGE_DONE_MARKER);
-    return awaitNextCompleteMessage;
+    return { awaitNextCompleteMessage, abortListeners };
 };
 const awaitInputReady = async (page) => {
     const inputHandle = await page.waitForSelector(SELECTOR_INPUT, DEFAULT_WAIT_SETTINGS);
@@ -166,7 +175,7 @@ const createChat = async (initialMessage) => {
     const history = [];
     const page = await puppeteer_1.default.newPage();
     autoDismissDialogs(page);
-    const awaitNextCompleteMessage = await injectMessageListenerToPage(page);
+    const { awaitNextCompleteMessage, abortListeners } = await injectMessageListenerToPage(page);
     await page.goto(exports.CHAT_GPT_URL);
     await awaitInputReady(page);
     const send = async (message) => {
@@ -175,14 +184,15 @@ const createChat = async (initialMessage) => {
         history.push({
             role: Role.USER,
             content: message,
-        });
-        history.push({
+        }, {
             role: Role.ASSISTANT,
             content: response,
         });
         return response;
     };
     const close = async () => {
+        page.removeAllListeners();
+        abortListeners();
         await page.close();
     };
     const response = initialMessage ? await send(initialMessage) : null;

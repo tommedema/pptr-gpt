@@ -54,7 +54,7 @@ declare const init: (options: PuppeteerLaunchOptions) => Promise<{
     _: {
         pptr: {
             browser: null;
-            init: (options: PuppeteerLaunchOptions) => Promise<any>;
+            init: (options: PuppeteerLaunchOptions) => Promise<import("puppeteer").Browser>;
             newPage: (url?: string | undefined, viewPort?: import("puppeteer").Viewport | undefined) => Promise<Page>;
             close: () => Promise<void>;
             _: {
@@ -77,7 +77,7 @@ declare const close: () => Promise<void>;
 declare const _: {
     pptr: {
         browser: null;
-        init: (options: PuppeteerLaunchOptions) => Promise<any>;
+        init: (options: PuppeteerLaunchOptions) => Promise<import("puppeteer").Browser>;
         newPage: (url?: string | undefined, viewPort?: import("puppeteer").Viewport | undefined) => Promise<Page>;
         close: () => Promise<void>;
         _: {
