@@ -19,14 +19,16 @@ const usePuppeteer = () => {
     return browser;
   };
 
-  const goTo = async (url: string, viewPort?: Viewport) => {
+  const newPage = async (url?: string, viewPort?: Viewport) => {
     if (!browser) {
       throw new Error('browser not yet initialized')
     }
 
     const page = await browser.newPage();
 
-    await page.goto(url);
+    if (url) {
+      await page.goto(url);
+    }
 
     await page.setViewport({
       width: 1360,
@@ -44,7 +46,7 @@ const usePuppeteer = () => {
 
   const _ = { puppeteer };
 
-  return { browser, init, goTo, close, _ };
+  return { browser, init, newPage, close, _ };
 }
 
 export default usePuppeteer()

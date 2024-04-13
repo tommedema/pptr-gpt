@@ -23,7 +23,6 @@
   "homepage": "https://github.com/dmytro-rudenko/pptr-gpt#readme",
   "license": "MIT",
   "dependencies": {
-    "html-to-text": "^9.0.5",
     "puppeteer": "^22.6.2",
     "puppeteer-core": "^22.6.2",
     "puppeteer-extra": "^3.3.6",
