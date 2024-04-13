@@ -113,8 +113,8 @@ function clickTextWhenAvailable(page: Page, text: string, elementTag = 'div', ti
 }
 
 const injectMessageListenerToPage = async (page: Page) => {
-  clickTextWhenAvailable(page, 'Regenerate', 'div', DEFAULT_OUTPUT_TIMEOUT + DEFAULT_CHANGE_TIMEOUT);
-  clickTextWhenAvailable(page, 'Continue generating', 'div', DEFAULT_OUTPUT_TIMEOUT + DEFAULT_CHANGE_TIMEOUT);
+  clickTextWhenAvailable(page, 'Regenerate', 'div', 0);
+  clickTextWhenAvailable(page, 'Continue generating', 'div', 0);
 
   const emitter = new EventEmitter();
   
@@ -176,7 +176,7 @@ const injectMessageListenerToPage = async (page: Page) => {
             try {
               const parsed = JSON.parse(chunk) as ChatGPTRootMessage
 
-              if (parsed?.message?.status === 'finished_successfully') {
+              if (parsed?.message?.status === 'finished_successfully' && typeof parsed.message.metadata?.finish_details?.type === 'string') {
                 ;(
                   window as unknown as Window & {
                     sentMessageToHost: typeof sentMessageToHost

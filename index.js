@@ -54,8 +54,8 @@ function clickTextWhenAvailable(page, text, elementTag = 'div', timeout = DEFAUL
     return () => abortController.abort();
 }
 const injectMessageListenerToPage = async (page) => {
-    clickTextWhenAvailable(page, 'Regenerate', 'div', DEFAULT_OUTPUT_TIMEOUT + DEFAULT_CHANGE_TIMEOUT);
-    clickTextWhenAvailable(page, 'Continue generating', 'div', DEFAULT_OUTPUT_TIMEOUT + DEFAULT_CHANGE_TIMEOUT);
+    clickTextWhenAvailable(page, 'Regenerate', 'div', 0);
+    clickTextWhenAvailable(page, 'Continue generating', 'div', 0);
     const emitter = new node_events_1.EventEmitter();
     const awaitNextCompleteMessage = () => new Promise((resolve) => emitter.once('finish', (messageString) => resolve(messageString)));
     let partialMessageParts = [];
@@ -84,7 +84,7 @@ const injectMessageListenerToPage = async (page) => {
                 const reader = clonedResponse.body.getReader();
                 const decoder = new TextDecoder('utf-8', { fatal: false });
                 async function processText({ done, value, }) {
-                    var _a;
+                    var _a, _b, _c;
                     const streamChunk = decoder.decode(value, { stream: true });
                     const chunkStrings = streamChunk
                         .split('data: ')
@@ -97,14 +97,14 @@ const injectMessageListenerToPage = async (page) => {
                         }
                         try {
                             const parsed = JSON.parse(chunk);
-                            if (((_a = parsed === null || parsed === void 0 ? void 0 : parsed.message) === null || _a === void 0 ? void 0 : _a.status) === 'finished_successfully') {
+                            if (((_a = parsed === null || parsed === void 0 ? void 0 : parsed.message) === null || _a === void 0 ? void 0 : _a.status) === 'finished_successfully' && typeof ((_c = (_b = parsed.message.metadata) === null || _b === void 0 ? void 0 : _b.finish_details) === null || _c === void 0 ? void 0 : _c.type) === 'string') {
                                 ;
                                 window.sentMessageToHost(chunk);
                                 reader.releaseLock();
                                 return Promise.resolve();
                             }
                         }
-                        catch (_b) {
+                        catch (_d) {
                             /* swallow */
                         }
                     }
@@ -117,7 +117,7 @@ const injectMessageListenerToPage = async (page) => {
                         const resultInner = await reader.read();
                         return processText(resultInner);
                     }
-                    catch (_c) {
+                    catch (_e) {
                         return await Promise.resolve();
                     }
                 }
