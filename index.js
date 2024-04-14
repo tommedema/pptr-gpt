@@ -22,7 +22,9 @@ const SELECTOR_SEND_BUTTON = "button[data-testid='send-button']";
 const SELECTOR_INPUT = "#prompt-textarea";
 const SELECTOR_SCROLL_DOWN = "button.rounded-full.bg-clip-padding:has(> svg)";
 function clickSelectorWhenAvailable(page, selector, timeout = DEFAULT_TIMEOUT, abortController = new AbortController()) {
+    let subCleaner = () => { };
     const cleanup = () => {
+        subCleaner();
         page.off("close" /* PageEvent.Close */, cleanup);
         if (!abortController.signal.aborted) {
             abortController.abort();
@@ -67,15 +69,14 @@ function clickSelectorWhenAvailable(page, selector, timeout = DEFAULT_TIMEOUT, a
                     }
                 }
                 if (!abortController.signal.aborted && !page.isClosed()) {
-                    return clickSelectorWhenAvailable(page, selector, timeout, abortController);
+                    subCleaner = clickSelectorWhenAvailable(page, selector, timeout, abortController);
                 }
             }
         })
             .catch((error) => {
             if (!abortController.signal.aborted && error.name !== "AbortError" && !page.isClosed()) {
-                console.trace("Show stack trace");
-                cleanup();
-                throw new Error(`Failed to find or click element: ${error.name} ${error.message}`);
+                console.warn(`Failed to find or click element: ${error.name} ${error.message}`);
+                subCleaner = clickSelectorWhenAvailable(page, selector, timeout, abortController);
             }
         });
     }
