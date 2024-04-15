@@ -49,7 +49,11 @@ function createDeferred() {
     };
 }
 function clickSelectorWhenAvailable(page, selector, timeout = 0, maxClicks = Number.POSITIVE_INFINITY, currentClicks = 0, abortController = new AbortController(), deferred = createDeferred()) {
+    let timeoutId = null;
     const cleanup = () => {
+        if (timeoutId) {
+            clearTimeout(timeoutId);
+        }
         page.off("close" /* PageEvent.Close */, cleanup);
         abortController.signal.removeEventListener('abort', cleanup);
         if (!abortController.signal.aborted) {
@@ -59,73 +63,69 @@ function clickSelectorWhenAvailable(page, selector, timeout = 0, maxClicks = Num
             deferred.resolve();
         }
     };
-    if (page.isClosed()) {
+    if (page.isClosed() || abortController.signal.aborted) {
         cleanup();
         return [cleanup, deferred.promise];
     }
-    else {
-        page.once("close" /* PageEvent.Close */, cleanup);
-        abortController.signal.addEventListener('abort', cleanup);
+    page.once("close" /* PageEvent.Close */, cleanup);
+    abortController.signal.addEventListener('abort', cleanup);
+    if (timeout > 0) {
+        timeoutId = setTimeout(cleanup, timeout);
     }
-    if (!abortController.signal.aborted) {
-        page
-            .waitForSelector(selector, { timeout, signal: abortController.signal })
-            .then(async (element) => {
-            if (!abortController.signal.aborted && !page.isClosed()) {
-                if (element) {
+    page
+        .waitForSelector(selector, { timeout, signal: abortController.signal })
+        .then(async (element) => {
+        if (!abortController.signal.aborted && !page.isClosed()) {
+            if (element) {
+                try {
+                    await element.click();
+                    currentClicks++;
+                }
+                catch (error) {
+                    console.error("Failed to click element: " + error.message);
+                    throw error;
+                }
+                if (!abortController.signal.aborted && !page.isClosed()) {
                     try {
-                        await element.click();
-                        currentClicks++;
+                        await element.dispose();
                     }
                     catch (error) {
-                        console.error("Failed to click element: " + error.message);
+                        console.error("Failed to dispose element: " + error.message);
                         throw error;
                     }
-                    if (!abortController.signal.aborted && !page.isClosed()) {
-                        try {
-                            await element.dispose();
-                        }
-                        catch (error) {
-                            console.error("Failed to dispose element: " + error.message);
-                            throw error;
-                        }
+                }
+                if (!abortController.signal.aborted && !page.isClosed()) {
+                    try {
+                        await page.waitForSelector(selector, { timeout: timeout === 0 ? DEFAULT_CHANGE_TIMEOUT : Math.min(timeout, DEFAULT_CHANGE_TIMEOUT), signal: abortController.signal, hidden: true });
                     }
-                    if (!abortController.signal.aborted && !page.isClosed()) {
-                        try {
-                            await page.waitForSelector(selector, { timeout: timeout === 0 ? DEFAULT_CHANGE_TIMEOUT : Math.min(timeout, DEFAULT_CHANGE_TIMEOUT), signal: abortController.signal, hidden: true });
-                        }
-                        catch (_a) {
-                            /* swallow */
-                        }
+                    catch (_a) {
+                        /* swallow */
                     }
                 }
-                if (!abortController.signal.aborted && !page.isClosed() && currentClicks < maxClicks) {
-                    clickSelectorWhenAvailable(page, selector, timeout, maxClicks, currentClicks, abortController, deferred);
-                }
-                else {
-                    cleanup();
-                }
             }
-            else {
-                cleanup();
-            }
-        })
-            .catch((error) => {
-            if (currentClicks >= maxClicks) {
-                cleanup();
-            }
-            else if (!abortController.signal.aborted && error.name !== "AbortError" && !page.isClosed()) {
-                console.warn(`Failed to find or click element: ${error.name} ${error.message}`);
+            if (!abortController.signal.aborted && !page.isClosed() && currentClicks < maxClicks) {
                 clickSelectorWhenAvailable(page, selector, timeout, maxClicks, currentClicks, abortController, deferred);
             }
             else {
                 cleanup();
             }
-        });
-    }
-    else {
-        cleanup();
-    }
+        }
+        else {
+            cleanup();
+        }
+    })
+        .catch((error) => {
+        if (currentClicks >= maxClicks) {
+            cleanup();
+        }
+        else if (!abortController.signal.aborted && error.name !== "AbortError" && !page.isClosed()) {
+            console.warn(`Failed to find or click element: ${error.name} ${error.message}`);
+            clickSelectorWhenAvailable(page, selector, timeout, maxClicks, currentClicks, abortController, deferred);
+        }
+        else {
+            cleanup();
+        }
+    });
     return [cleanup, deferred.promise];
 }
 function clickTextWhenAvailable(page, text, elementTag = 'div') {
