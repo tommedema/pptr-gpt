@@ -1,6 +1,6 @@
 import pptr from "./services/puppeteer";
 import { Page, PageEvent, PuppeteerLaunchOptions } from "puppeteer";
-import { EventEmitter } from 'node:events'
+import { EventEmitter, setMaxListeners } from 'node:events'
 
 export enum Role {
   USER = "user",
@@ -76,6 +76,8 @@ const SELECTOR_INPUT = "#prompt-textarea";
 const SELECTOR_SCROLL_DOWN = "button.rounded-full.bg-clip-padding:has(> svg)";
 const SELECTOR_STOP = "button[aria-label='Stop generating']";
 
+setMaxListeners(100)
+
 interface Deferred<T> {
   promise: Promise<T>;
   resolve: (value: T | PromiseLike<T>) => void;
@@ -111,7 +113,7 @@ function createDeferred<T>(): Deferred<T> {
   };
 }
 
-function clickSelectorWhenAvailable(page: Page, selector: string, timeout = DEFAULT_TIMEOUT, abortController = new AbortController(), deferred = createDeferred<void>()): [() => void, Promise<void>] {
+function clickSelectorWhenAvailable(page: Page, selector: string, timeout = 0, maxClicks = Number.POSITIVE_INFINITY, currentClicks = 0, abortController = new AbortController(), deferred = createDeferred<void>()): [() => void, Promise<void>] {
   const cleanup = () => {
     page.off(PageEvent.Close, cleanup);
     abortController.signal.removeEventListener('abort', cleanup);
@@ -140,6 +142,7 @@ function clickSelectorWhenAvailable(page: Page, selector: string, timeout = DEFA
           if (element) {
             try {
               await element.click();
+              currentClicks++;
             } catch (error) {
                 console.error("Failed to click element: " + (error as Error).message);
                 throw error;
@@ -163,8 +166,8 @@ function clickSelectorWhenAvailable(page: Page, selector: string, timeout = DEFA
             }
           }
           
-          if (!abortController.signal.aborted && !page.isClosed()) {
-            clickSelectorWhenAvailable(page, selector, timeout, abortController, deferred);
+          if (!abortController.signal.aborted && !page.isClosed() && currentClicks < maxClicks) {
+            clickSelectorWhenAvailable(page, selector, timeout, maxClicks, currentClicks, abortController, deferred);
           }
           else {
             cleanup();
@@ -175,9 +178,12 @@ function clickSelectorWhenAvailable(page: Page, selector: string, timeout = DEFA
         }
       })
       .catch((error: Error) => {
-        if (!abortController.signal.aborted && error.name !== "AbortError" && !page.isClosed()) {
+        if (currentClicks >= maxClicks) {
+          cleanup();
+        }
+        else if (!abortController.signal.aborted && error.name !== "AbortError" && !page.isClosed()) {
           console.warn(`Failed to find or click element: ${error.name} ${error.message}`);
-          clickSelectorWhenAvailable(page, selector, timeout, abortController, deferred);
+          clickSelectorWhenAvailable(page, selector, timeout, maxClicks, currentClicks, abortController, deferred);
         }
         else {
           cleanup();
@@ -191,17 +197,17 @@ function clickSelectorWhenAvailable(page: Page, selector: string, timeout = DEFA
   return [cleanup, deferred.promise];
 }
 
-function clickTextWhenAvailable(page: Page, text: string, elementTag = 'div', timeout = DEFAULT_TIMEOUT, abortController = new AbortController()) {
+function clickTextWhenAvailable(page: Page, text: string, elementTag = 'div') {
   const selector = `xpath/${elementTag}[contains(text(), "${text}")]`;
 
-  const [cleanup] = clickSelectorWhenAvailable(page, selector, timeout, abortController);
+  const [cleanup] = clickSelectorWhenAvailable(page, selector);
 
   return cleanup;
 }
 
 const injectMessageListenerToPage = async (page: Page) => {
-  const abortListener1 = clickTextWhenAvailable(page, 'Regenerate', 'div', 0);
-  const abortListener2 = clickTextWhenAvailable(page, 'Continue generating', 'div', 0);
+  const abortListener1 = clickTextWhenAvailable(page, 'Regenerate');
+  const abortListener2 = clickTextWhenAvailable(page, 'Continue generating');
   const [abortListener3] = clickSelectorWhenAvailable(page, SELECTOR_SCROLL_DOWN, 0);
 
   const abortListeners = () => {
@@ -374,7 +380,7 @@ const createChat = async (initialMessage?: string) => {
     })
 
     if (interruptResponse) {
-      const [cleanup, promise] = clickSelectorWhenAvailable(page, SELECTOR_STOP, DEFAULT_CHANGE_TIMEOUT);
+      const [cleanup, promise] = clickSelectorWhenAvailable(page, SELECTOR_STOP, DEFAULT_CHANGE_TIMEOUT, 1);
       await promise;
       cleanup();
     }

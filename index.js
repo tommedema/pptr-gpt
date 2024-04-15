@@ -22,6 +22,7 @@ const SELECTOR_SEND_BUTTON = "button[data-testid='send-button']";
 const SELECTOR_INPUT = "#prompt-textarea";
 const SELECTOR_SCROLL_DOWN = "button.rounded-full.bg-clip-padding:has(> svg)";
 const SELECTOR_STOP = "button[aria-label='Stop generating']";
+(0, node_events_1.setMaxListeners)(100);
 function createDeferred() {
     let externalResolve = undefined;
     let externalReject = undefined;
@@ -47,7 +48,7 @@ function createDeferred() {
         isFulfilled: () => isFulfilled
     };
 }
-function clickSelectorWhenAvailable(page, selector, timeout = DEFAULT_TIMEOUT, abortController = new AbortController(), deferred = createDeferred()) {
+function clickSelectorWhenAvailable(page, selector, timeout = 0, maxClicks = Number.POSITIVE_INFINITY, currentClicks = 0, abortController = new AbortController(), deferred = createDeferred()) {
     const cleanup = () => {
         page.off("close" /* PageEvent.Close */, cleanup);
         abortController.signal.removeEventListener('abort', cleanup);
@@ -74,6 +75,7 @@ function clickSelectorWhenAvailable(page, selector, timeout = DEFAULT_TIMEOUT, a
                 if (element) {
                     try {
                         await element.click();
+                        currentClicks++;
                     }
                     catch (error) {
                         console.error("Failed to click element: " + error.message);
@@ -97,8 +99,8 @@ function clickSelectorWhenAvailable(page, selector, timeout = DEFAULT_TIMEOUT, a
                         }
                     }
                 }
-                if (!abortController.signal.aborted && !page.isClosed()) {
-                    clickSelectorWhenAvailable(page, selector, timeout, abortController, deferred);
+                if (!abortController.signal.aborted && !page.isClosed() && currentClicks < maxClicks) {
+                    clickSelectorWhenAvailable(page, selector, timeout, maxClicks, currentClicks, abortController, deferred);
                 }
                 else {
                     cleanup();
@@ -109,9 +111,12 @@ function clickSelectorWhenAvailable(page, selector, timeout = DEFAULT_TIMEOUT, a
             }
         })
             .catch((error) => {
-            if (!abortController.signal.aborted && error.name !== "AbortError" && !page.isClosed()) {
+            if (currentClicks >= maxClicks) {
+                cleanup();
+            }
+            else if (!abortController.signal.aborted && error.name !== "AbortError" && !page.isClosed()) {
                 console.warn(`Failed to find or click element: ${error.name} ${error.message}`);
-                clickSelectorWhenAvailable(page, selector, timeout, abortController, deferred);
+                clickSelectorWhenAvailable(page, selector, timeout, maxClicks, currentClicks, abortController, deferred);
             }
             else {
                 cleanup();
@@ -123,14 +128,14 @@ function clickSelectorWhenAvailable(page, selector, timeout = DEFAULT_TIMEOUT, a
     }
     return [cleanup, deferred.promise];
 }
-function clickTextWhenAvailable(page, text, elementTag = 'div', timeout = DEFAULT_TIMEOUT, abortController = new AbortController()) {
+function clickTextWhenAvailable(page, text, elementTag = 'div') {
     const selector = `xpath/${elementTag}[contains(text(), "${text}")]`;
-    const [cleanup] = clickSelectorWhenAvailable(page, selector, timeout, abortController);
+    const [cleanup] = clickSelectorWhenAvailable(page, selector);
     return cleanup;
 }
 const injectMessageListenerToPage = async (page) => {
-    const abortListener1 = clickTextWhenAvailable(page, 'Regenerate', 'div', 0);
-    const abortListener2 = clickTextWhenAvailable(page, 'Continue generating', 'div', 0);
+    const abortListener1 = clickTextWhenAvailable(page, 'Regenerate');
+    const abortListener2 = clickTextWhenAvailable(page, 'Continue generating');
     const [abortListener3] = clickSelectorWhenAvailable(page, SELECTOR_SCROLL_DOWN, 0);
     const abortListeners = () => {
         abortListener1();
@@ -257,7 +262,7 @@ const createChat = async (initialMessage) => {
             content: message,
         });
         if (interruptResponse) {
-            const [cleanup, promise] = clickSelectorWhenAvailable(page, SELECTOR_STOP, DEFAULT_CHANGE_TIMEOUT);
+            const [cleanup, promise] = clickSelectorWhenAvailable(page, SELECTOR_STOP, DEFAULT_CHANGE_TIMEOUT, 1);
             await promise;
             cleanup();
         }
