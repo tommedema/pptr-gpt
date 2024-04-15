@@ -21,21 +21,50 @@ const DEFAULT_WAIT_SETTINGS = {
 const SELECTOR_SEND_BUTTON = "button[data-testid='send-button']";
 const SELECTOR_INPUT = "#prompt-textarea";
 const SELECTOR_SCROLL_DOWN = "button.rounded-full.bg-clip-padding:has(> svg)";
-function clickSelectorWhenAvailable(page, selector, timeout = DEFAULT_TIMEOUT, abortController = new AbortController()) {
-    let subCleaner = () => { };
+const SELECTOR_STOP = "button[aria-label='Stop generating']";
+function createDeferred() {
+    let externalResolve = undefined;
+    let externalReject = undefined;
+    let isFulfilled = false;
+    const promise = new Promise((resolve, reject) => {
+        externalResolve = (value) => {
+            if (!isFulfilled) {
+                isFulfilled = true;
+                resolve(value);
+            }
+        };
+        externalReject = (reason) => {
+            if (!isFulfilled) {
+                isFulfilled = true;
+                reject(reason);
+            }
+        };
+    });
+    return {
+        promise,
+        resolve: externalResolve,
+        reject: externalReject,
+        isFulfilled: () => isFulfilled
+    };
+}
+function clickSelectorWhenAvailable(page, selector, timeout = DEFAULT_TIMEOUT, abortController = new AbortController(), deferred = createDeferred()) {
     const cleanup = () => {
-        subCleaner();
         page.off("close" /* PageEvent.Close */, cleanup);
+        abortController.signal.removeEventListener('abort', cleanup);
         if (!abortController.signal.aborted) {
             abortController.abort();
+        }
+        if (!deferred.isFulfilled()) {
+            deferred.resolve();
         }
     };
     if (page.isClosed()) {
         cleanup();
-        return () => { };
+        return [cleanup, deferred.promise];
     }
     else {
         page.once("close" /* PageEvent.Close */, cleanup);
+        abortController.signal.addEventListener('abort', cleanup);
     }
     if (!abortController.signal.aborted) {
         page
@@ -69,27 +98,40 @@ function clickSelectorWhenAvailable(page, selector, timeout = DEFAULT_TIMEOUT, a
                     }
                 }
                 if (!abortController.signal.aborted && !page.isClosed()) {
-                    subCleaner = clickSelectorWhenAvailable(page, selector, timeout, abortController);
+                    clickSelectorWhenAvailable(page, selector, timeout, abortController, deferred);
                 }
+                else {
+                    cleanup();
+                }
+            }
+            else {
+                cleanup();
             }
         })
             .catch((error) => {
             if (!abortController.signal.aborted && error.name !== "AbortError" && !page.isClosed()) {
                 console.warn(`Failed to find or click element: ${error.name} ${error.message}`);
-                subCleaner = clickSelectorWhenAvailable(page, selector, timeout, abortController);
+                clickSelectorWhenAvailable(page, selector, timeout, abortController, deferred);
+            }
+            else {
+                cleanup();
             }
         });
     }
-    return cleanup;
+    else {
+        cleanup();
+    }
+    return [cleanup, deferred.promise];
 }
 function clickTextWhenAvailable(page, text, elementTag = 'div', timeout = DEFAULT_TIMEOUT, abortController = new AbortController()) {
     const selector = `xpath/${elementTag}[contains(text(), "${text}")]`;
-    return clickSelectorWhenAvailable(page, selector, timeout, abortController);
+    const [cleanup] = clickSelectorWhenAvailable(page, selector, timeout, abortController);
+    return cleanup;
 }
 const injectMessageListenerToPage = async (page) => {
     const abortListener1 = clickTextWhenAvailable(page, 'Regenerate', 'div', 0);
     const abortListener2 = clickTextWhenAvailable(page, 'Continue generating', 'div', 0);
-    const abortListener3 = clickSelectorWhenAvailable(page, SELECTOR_SCROLL_DOWN, 0);
+    const [abortListener3] = clickSelectorWhenAvailable(page, SELECTOR_SCROLL_DOWN, 0);
     const abortListeners = () => {
         abortListener1();
         abortListener2();
@@ -208,17 +250,26 @@ const createChat = async (initialMessage) => {
     const { awaitNextCompleteMessage, abortListeners } = await injectMessageListenerToPage(page);
     await page.goto(exports.CHAT_GPT_URL);
     await awaitInputReady(page);
-    const send = async (message) => {
+    const send = async (message, interruptResponse = false) => {
         await submitMessage(page, message);
-        const response = await awaitNextCompleteMessage();
         history.push({
             role: Role.USER,
             content: message,
-        }, {
-            role: Role.ASSISTANT,
-            content: response,
         });
-        return response;
+        if (interruptResponse) {
+            const [cleanup, promise] = clickSelectorWhenAvailable(page, SELECTOR_STOP, DEFAULT_CHANGE_TIMEOUT);
+            await promise;
+            cleanup();
+        }
+        else {
+            const response = await awaitNextCompleteMessage();
+            history.push({
+                role: Role.ASSISTANT,
+                content: response,
+            });
+            return response;
+        }
+        return null;
     };
     const close = async () => {
         page.removeAllListeners();

@@ -69,7 +69,7 @@ declare const createChat: (initialMessage?: string) => Promise<{
     };
     response: string | null;
     history: ChatHistory[];
-    send: (message: string) => Promise<string>;
+    send: (message: string, interruptResponse?: boolean) => Promise<string | null>;
     close: () => Promise<void>;
 }>;
 declare const singleMessage: (text: string) => Promise<string>;
