@@ -20,31 +20,6 @@ const SELECTOR_SEND_BUTTON = "button[data-testid='send-button']";
 const SELECTOR_INPUT = "#prompt-textarea";
 const SELECTOR_STOP = "button[aria-label='Stop generating']";
 (0, node_events_1.setMaxListeners)(100);
-function createDeferred() {
-    let externalResolve = undefined;
-    let externalReject = undefined;
-    let isFulfilled = false;
-    const promise = new Promise((resolve, reject) => {
-        externalResolve = (value) => {
-            if (!isFulfilled) {
-                isFulfilled = true;
-                resolve(value);
-            }
-        };
-        externalReject = (reason) => {
-            if (!isFulfilled) {
-                isFulfilled = true;
-                reject(reason);
-            }
-        };
-    });
-    return {
-        promise,
-        resolve: externalResolve,
-        reject: externalReject,
-        isFulfilled: () => isFulfilled
-    };
-}
 async function clickSelectorWhenAvailable(page, selector, timeout = DEFAULT_TIMEOUT) {
     await page
         .waitForSelector(selector, { timeout })
@@ -164,12 +139,12 @@ const init = async (options) => {
 };
 exports.init = init;
 const autoDismissDialogs = (page) => page.on('dialog', dialog => dialog.dismiss());
-const createChat = async (initialMessage) => {
+const createChat = async (newGptUrl = exports.CHAT_GPT_URL) => {
     const history = [];
     const page = await puppeteer_1.default.newPage();
     autoDismissDialogs(page);
     const { awaitNextCompleteMessage } = await injectMessageListenerToPage(page);
-    await page.goto(exports.CHAT_GPT_URL);
+    await page.goto(newGptUrl);
     await awaitInputReady(page);
     const send = async (message, interruptResponse = false) => {
         await submitMessage(page, message);
@@ -195,24 +170,23 @@ const createChat = async (initialMessage) => {
         page.removeAllListeners();
         await page.close();
     };
-    const response = initialMessage ? await send(initialMessage) : null;
     const _ = { page };
     return {
         _,
-        response,
         history,
         send,
         close,
     };
 };
 exports.createChat = createChat;
-const singleMessage = async (text) => {
-    const chat = await createChat(text);
-    if (typeof chat.response !== 'string') {
+const singleMessage = async (text, newGptUrl = exports.CHAT_GPT_URL) => {
+    const chat = await createChat(newGptUrl);
+    const response = await chat.send(text);
+    if (typeof response !== 'string') {
         throw new Error('initial chat response is not a string');
     }
     await chat.close();
-    return chat.response;
+    return response;
 };
 exports.singleMessage = singleMessage;
 const close = async () => {

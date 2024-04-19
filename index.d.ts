@@ -63,16 +63,15 @@ declare const init: (options: PuppeteerLaunchOptions) => Promise<{
         };
     };
 }>;
-declare const createChat: (initialMessage?: string) => Promise<{
+declare const createChat: (newGptUrl?: string) => Promise<{
     _: {
         page: Page;
     };
-    response: string | null;
     history: ChatHistory[];
     send: (message: string, interruptResponse?: boolean) => Promise<string | null>;
     close: () => Promise<void>;
 }>;
-declare const singleMessage: (text: string) => Promise<string>;
+declare const singleMessage: (text: string, newGptUrl?: string) => Promise<string>;
 declare const close: () => Promise<void>;
 declare const _: {
     pptr: {
