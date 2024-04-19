@@ -33,7 +33,7 @@ export interface ChatGPTAuthor {
 
 export interface ChatGPTContent {
   content_type: 'text'
-  parts: string[]
+  parts?: string[] | undefined
 }
 
 export interface ChatGPTMetadata {
@@ -129,7 +129,10 @@ const injectMessageListenerToPage = async (page: Page) => {
   const sentMessageToHost = (messageJSONString: string) => {
     const rootMessage = JSON.parse(messageJSONString) as ChatGPTRootMessage;
 
-    partialMessageParts.push(...rootMessage.message.content.parts);
+    // In rare cases we amy receive empty messages that result in parts being undefined
+    const parts = rootMessage.message.content.parts ?? ['']
+
+    partialMessageParts.push(...parts);
 
     if (rootMessage.message.metadata.finish_details.type === 'stop') {
       emitter.emit('finish', partialMessageParts.join(''));

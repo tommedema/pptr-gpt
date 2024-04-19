@@ -26,7 +26,7 @@ export interface ChatGPTAuthor {
 }
 export interface ChatGPTContent {
     content_type: 'text';
-    parts: string[];
+    parts?: string[] | undefined;
 }
 export interface ChatGPTMetadata {
     finish_details: ChatGPTFinishDetails;

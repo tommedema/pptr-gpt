@@ -59,8 +59,11 @@ const injectMessageListenerToPage = async (page) => {
     const awaitNextCompleteMessage = () => new Promise((resolve) => emitter.once('finish', (messageString) => resolve(messageString)));
     let partialMessageParts = [];
     const sentMessageToHost = (messageJSONString) => {
+        var _a;
         const rootMessage = JSON.parse(messageJSONString);
-        partialMessageParts.push(...rootMessage.message.content.parts);
+        // In rare cases we amy receive empty messages that result in parts being undefined
+        const parts = (_a = rootMessage.message.content.parts) !== null && _a !== void 0 ? _a : [''];
+        partialMessageParts.push(...parts);
         if (rootMessage.message.metadata.finish_details.type === 'stop') {
             emitter.emit('finish', partialMessageParts.join(''));
             partialMessageParts = [];
