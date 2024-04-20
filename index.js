@@ -61,7 +61,7 @@ const injectMessageListenerToPage = async (page) => {
                 const reader = clonedResponse.body.getReader();
                 const decoder = new TextDecoder('utf-8', { fatal: false });
                 async function processText({ done, value, }) {
-                    var _a, _b, _c;
+                    var _a, _b, _c, _d;
                     const streamChunk = decoder.decode(value, { stream: true });
                     const chunkStrings = streamChunk
                         .split('data: ')
@@ -74,14 +74,16 @@ const injectMessageListenerToPage = async (page) => {
                         }
                         try {
                             const parsed = JSON.parse(chunk);
-                            if (((_a = parsed === null || parsed === void 0 ? void 0 : parsed.message) === null || _a === void 0 ? void 0 : _a.status) === 'finished_successfully' && typeof ((_c = (_b = parsed.message.metadata) === null || _b === void 0 ? void 0 : _b.finish_details) === null || _c === void 0 ? void 0 : _c.type) === 'string') {
+                            if (((_a = parsed === null || parsed === void 0 ? void 0 : parsed.message) === null || _a === void 0 ? void 0 : _a.status) === 'finished_successfully' &&
+                                ((_b = parsed === null || parsed === void 0 ? void 0 : parsed.message) === null || _b === void 0 ? void 0 : _b.recipient) === 'all' &&
+                                typeof ((_d = (_c = parsed.message.metadata) === null || _c === void 0 ? void 0 : _c.finish_details) === null || _d === void 0 ? void 0 : _d.type) === 'string') {
                                 ;
                                 window.sentMessageToHost(chunk);
                                 reader.releaseLock();
                                 return Promise.resolve();
                             }
                         }
-                        catch (_d) {
+                        catch (_e) {
                             /* swallow */
                         }
                     }
@@ -94,7 +96,7 @@ const injectMessageListenerToPage = async (page) => {
                         const resultInner = await reader.read();
                         return processText(resultInner);
                     }
-                    catch (_e) {
+                    catch (_f) {
                         return await Promise.resolve();
                     }
                 }

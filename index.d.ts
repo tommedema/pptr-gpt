@@ -17,7 +17,7 @@ export interface ChatGPTMessage {
     end_turn: boolean | null;
     weight: number;
     metadata: ChatGPTMetadata;
-    recipient: 'all';
+    recipient: 'all' | string;
 }
 export interface ChatGPTAuthor {
     role: 'assistant' | 'user';

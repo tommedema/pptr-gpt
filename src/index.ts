@@ -22,7 +22,7 @@ export interface ChatGPTMessage {
   end_turn: boolean | null
   weight: number
   metadata: ChatGPTMetadata
-  recipient: 'all'
+  recipient: 'all' | string
 }
 
 export interface ChatGPTAuthor {
@@ -149,7 +149,11 @@ const injectMessageListenerToPage = async (page: Page) => {
             try {
               const parsed = JSON.parse(chunk) as ChatGPTRootMessage;
 
-              if (parsed?.message?.status === 'finished_successfully' && typeof parsed.message.metadata?.finish_details?.type === 'string') {
+              if (
+                parsed?.message?.status === 'finished_successfully' &&
+                parsed?.message?.recipient === 'all' &&
+                typeof parsed.message.metadata?.finish_details?.type === 'string'
+              ) {
                 ;(
                   window as unknown as Window & {
                     sentMessageToHost: typeof sentMessageToHost
